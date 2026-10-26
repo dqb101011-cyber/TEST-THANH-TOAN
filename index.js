@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static('public')); // Chứa file HTML
 
-// Lưu trữ tạm trên RAM (Khi test thì dùng cái này, chạy thật thì phải dùng Database)
+// Lưu trữ tạm trên RAM (Khi test thì dùng cái này)
 const orders = {}; 
 
 // API 1: Tạo đơn hàng mới
@@ -15,28 +15,29 @@ app.post('/api/create-order', (req, res) => {
     // Random mã đơn hàng (Ví dụ: NAP83921)
     const orderCode = 'NAP' + Math.floor(Math.random() * 1000000);
     
-    // Lưu vào bộ nhớ
     orders[orderCode] = {
         username: username,
         amount: amount,
         status: 'pending' // Đang chờ
     };
 
-    // Tạo link QR (Dùng API của VietQR, cực dễ, không cần cấu hình SePay API)
-    // Lưu ý: Thay MBBANK và SỐ_TÀI_KHOẢN bằng thông tin thật của bạn
-    const bankId = 'MBBANK'; 
-    const accountNo = '0123456789'; 
-    const accountName = 'NGUYEN VAN A';
+    // --- THÔNG TIN NGÂN HÀNG CỦA BẠN ĐÃ ĐƯỢC CẬP NHẬT ---
+    const bankId = 'TPBANK'; 
+    const accountNo = '98437888888'; // Đã bỏ khoảng trắng
+    const accountName = 'DUONG QUOC BAO';
+    
+    // Tạo link QR động
     const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${orderCode}&accountName=${encodeURIComponent(accountName)}`;
 
     res.json({
         success: true,
         orderCode: orderCode,
-        qrUrl: qrUrl
+        qrUrl: qrUrl,
+        accountName: accountName
     });
 });
 
-// API 2: Kiểm tra trạng thái đơn hàng (Frontend sẽ gọi liên tục)
+// API 2: Kiểm tra trạng thái đơn hàng
 app.get('/api/check-status/:orderCode', (req, res) => {
     const orderCode = req.params.orderCode;
     const order = orders[orderCode];
@@ -51,20 +52,18 @@ app.get('/api/check-status/:orderCode', (req, res) => {
 // API 3: Nhận Webhook từ SePay
 app.post('/sepay-webhook', (req, res) => {
     console.log('--- CÓ GIAO DỊCH TỪ SEPAY ---');
-    console.log(req.body);
-
-    // Lấy nội dung chuyển khoản (SePay trả về trong trường content hoặc description)
-    const content = req.body.content || req.body.description || '';
     
-    // Kiểm tra xem nội dung có chứa mã đơn hàng của mình không
+    // SePay trả về nội dung chuyển khoản trong trường content
+    const content = req.body.content || '';
+    
+    // Tìm xem nội dung chuyển khoản có chứa mã đơn hàng nào không
     const matchedOrderCode = Object.keys(orders).find(code => content.includes(code));
 
     if (matchedOrderCode) {
         orders[matchedOrderCode].status = 'success';
-        console.log(`=> Đã cộng tiền thành công cho đơn: ${matchedOrderCode}`);
+        console.log(`=> Thành công: Đơn ${matchedOrderCode}`);
     }
 
-    // Phải trả về 200 để SePay biết đã nhận
     res.status(200).json({ success: true });
 });
 
