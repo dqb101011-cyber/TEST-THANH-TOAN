@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nạp Tiền Tự Động</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; }
+        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        #qr-section { display: none; margin-top: 20px; }
+        img { max-width: 100%; border-radius: 8px; border: 1px solid #ddd; }
+        .info { text-align: left; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 14px;}
+        .success-msg { display: none; color: green; font-size: 20px; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>Nạp Tiền Vào Tài Khoản</h2>
+    
+    <!-- Bước 1: Form nhập -->
+    <div id="form-section">
+        <input type="text" id="username" placeholder="Nhập tên đăng nhập của bạn">
+        <input type="number" id="amount" placeholder="Nhập số tiền (VNĐ)">
+        <button onclick="createOrder()">Tiến hành nạp tiền</button>
+    </div>
+
+    <!-- Bước 2: Hiển thị QR -->
+    <div id="qr-section">
+        <p><strong>Vui lòng quét mã QR dưới đây để thanh toán:</strong></p>
+        <img id="qr-image" src="" alt="Mã QR Thanh Toán">
+        <div class="info">
+            <p><strong>Chủ tài khoản:</strong> NGUYEN VAN A</p>
+            <p><strong>Số tiền:</strong> <span id="display-amount"></span> VNĐ</p>
+            <p><strong>Nội dung CK:</strong> <span id="display-code" style="color: red; font-weight: bold;"></span></p>
+            <p style="color: gray; font-size: 12px;">*Lưu ý: Bạn không được sửa nội dung chuyển khoản. Nếu sai, hệ thống không cộng tiền.</p>
+        </div>
+        <p style="margin-top: 15px; color: #007bff;">Đang chờ bạn chuyển khoản...</p>
+    </div>
+
+    <!-- Bước 3: Thành công -->
+    <div class="success-msg" id="success-section">
+        <h2>🎉 NẠP THÀNH CÔNG!</h2>
+        <p>Đã cộng <span id="success-amount"></span> VNĐ vào tài khoản <span id="success-user"></span>.</p>
+    </div>
+</div>
+
+<script>
+    let checkInterval;
+
+    async function createOrder() {
+        const username = document.getElementById('username').value;
+        const amount = document.getElementById('amount').value;
+
+        if (!username || amount < 1000) {
+            alert('Vui lòng nhập tên và số tiền hợp lệ (tối thiểu 1.000đ)');
+            return;
+        }
+
+        // Gọi API lên server
+        const response = await fetch('/api/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, amount })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Ẩn form, hiện QR
+            document.getElementById('form-section').style.display = 'none';
+            document.getElementById('qr-section').style.display = 'block';
+            
+            // Điền thông tin vào giao diện
+            document.getElementById('qr-image').src = data.qrUrl;
+            document.getElementById('display-amount').innerText = Number(amount).toLocaleString('vi-VN');
+            document.getElementById('display-code').innerText = data.orderCode;
+
+            // Bắt đầu kiểm tra trạng thái mỗi 3 giây
+            checkInterval = setInterval(() => checkStatus(data.orderCode), 3000);
+        }
+    }
+
+    async function checkStatus(orderCode) {
+        const response = await fetch(`/api/check-status/${orderCode}`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            clearInterval(checkInterval); // Dừng kiểm tra
+            
+            // Ẩn QR, hiện thông báo thành công
+            document.getElementById('qr-section').style.display = 'none';
+            document.getElementById('success-section').style.display = 'block';
+            
+            document.getElementById('success-amount').innerText = Number(data.amount).toLocaleString('vi-VN');
+            document.getElementById('success-user').innerText = data.username;
+        }
+    }
+</script>
+
+</body>
+</html>
