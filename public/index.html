@@ -33,10 +33,10 @@
         <p><strong>Vui lòng quét mã QR dưới đây để thanh toán:</strong></p>
         <img id="qr-image" src="" alt="Mã QR Thanh Toán">
         <div class="info">
-            <p><strong>Chủ tài khoản:</strong> NGUYEN VAN A</p>
+            <p><strong>Chủ tài khoản:</strong> <span id="display-account-name"></span></p>
             <p><strong>Số tiền:</strong> <span id="display-amount"></span> VNĐ</p>
             <p><strong>Nội dung CK:</strong> <span id="display-code" style="color: red; font-weight: bold;"></span></p>
-            <p style="color: gray; font-size: 12px;">*Lưu ý: Bạn không được sửa nội dung chuyển khoản. Nếu sai, hệ thống không cộng tiền.</p>
+            <p style="color: gray; font-size: 12px;">*Lưu ý: Bạn không được sửa nội dung chuyển khoản.</p>
         </div>
         <p style="margin-top: 15px; color: #007bff;">Đang chờ bạn chuyển khoản...</p>
     </div>
@@ -60,7 +60,6 @@
             return;
         }
 
-        // Gọi API lên server
         const response = await fetch('/api/create-order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -70,16 +69,14 @@
         const data = await response.json();
 
         if (data.success) {
-            // Ẩn form, hiện QR
             document.getElementById('form-section').style.display = 'none';
             document.getElementById('qr-section').style.display = 'block';
             
-            // Điền thông tin vào giao diện
             document.getElementById('qr-image').src = data.qrUrl;
             document.getElementById('display-amount').innerText = Number(amount).toLocaleString('vi-VN');
             document.getElementById('display-code').innerText = data.orderCode;
+            document.getElementById('display-account-name').innerText = data.accountName;
 
-            // Bắt đầu kiểm tra trạng thái mỗi 3 giây
             checkInterval = setInterval(() => checkStatus(data.orderCode), 3000);
         }
     }
@@ -89,12 +86,9 @@
         const data = await response.json();
 
         if (data.status === 'success') {
-            clearInterval(checkInterval); // Dừng kiểm tra
-            
-            // Ẩn QR, hiện thông báo thành công
+            clearInterval(checkInterval);
             document.getElementById('qr-section').style.display = 'none';
             document.getElementById('success-section').style.display = 'block';
-            
             document.getElementById('success-amount').innerText = Number(data.amount).toLocaleString('vi-VN');
             document.getElementById('success-user').innerText = data.username;
         }
