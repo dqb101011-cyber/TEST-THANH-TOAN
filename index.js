@@ -5,101 +5,151 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// DATABASE TẠM (Lưu số dư và đơn hàng chờ)
-// ==========================================
-// Lưu số dư: { "uid_zalo_1": 50000, "uid_zalo_2": 100000 }
-const userBalances = {}; 
-// Lưu đơn chờ: { "NAPuid_zalo_1": { username: "Bao", status: "pending" } }
-const pendingOrders = {}; 
-
-// ==========================================
-// CẤU HÌNH THÔNG TIN
+// CẤU HÌNH THÔNG TIN (Thay bằng thông tin của bạn)
 // ==========================================
 const BANK_ID = 'TPBANK';
 const ACCOUNT_NO = '98437888888';
 const ACCOUNT_NAME = 'DUONG QUOC BAO';
+const PREFIX = ".";
+
+// CẤU HÌNH ZALO BOT
+const ZALO_BOT_TOKEN = '4021519611107965798:mHOMYRHTjxDbRdfPvkXeOcyawJYaRMioZkHmySaxjUTZFRScsaeKdpNBwrGXpWvx'; // Bấm con mắt trên Zalo Bot để lấy
+const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; // Như trên ảnh của bạn
 
 // ==========================================
-// API 1: Bot Zalo gọi vào đây khi user gõ lệnh .nap
+// DATABASE TẠM (Lưu số dư và đơn hàng)
+// Lưu ý: Nếu Render khởi động lại, dữ liệu này sẽ mất.
+// Khi chạy thực tế, bạn nên thay bằng MongoDB hoặc Supabase.
 // ==========================================
-app.post('/api/zalo-nap', (req, res) => {
-    const { uid, username } = req.body;
+const userBalances = {}; // { "uid_zalo": 50000 }
+const pendingOrders = {}; // { "NAPuid_zalo": { chatId, senderUid, name, status } }
 
-    if (!uid) return res.status(400).json({ error: 'Thiếu UID' });
-
-    const orderCode = `NAP${uid}`;
-    
-    // Nếu user đã có đơn đang chờ, không tạo thêm để tránh spam
-    if (pendingOrders[orderCode] && pendingOrders[orderCode].status === 'pending') {
-        return res.json({ 
-            success: false, 
-            message: `Bạn đang có đơn nạp chờ thanh toán. Vui lòng hoàn tất trước khi tạo đơn mới!` 
-        });
+// ==========================================
+// 1. WEBHOOK ZALO BOT (Zalo gọi vào đây khi có tin nhắn)
+// ==========================================
+app.post('/zalo-webhook', async (req, res) => {
+    // Xác thực Secret Token để đảm bảo request này do Zalo gửi tới
+    const secretHeader = req.headers['x-bot-api-secret-token'];
+    if (secretHeader !== ZALO_SECRET_TOKEN) {
+        return res.status(401).send('Unauthorized');
     }
 
-    pendingOrders[orderCode] = { uid, username, status: 'pending' };
+    // Phải trả về 200 ngay lập tức để Zalo không gửi lại tin nhắn
+    res.status(200).send('OK');
 
-    // Tạo QR không có số tiền
-    const qrUrl = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?addInfo=${orderCode}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
+    try {
+        const data = req.body;
+        
+        // Chỉ xử lý khi có tin nhắn văn bản mới
+        if (data.event_name === 'message.text.received') {
+            const text = data.message.text.trim();
+            const chatId = data.message.chat.id;       // ID nhóm hoặc chat riêng
+            const senderUid = data.message.from.id;    // UID người gửi
+            const senderName = data.message.from.display_name;
 
-    res.json({
-        success: true,
-        message: `Vui lòng quét mã QR và **tự nhập số tiền** bạn muốn nạp.\nTuyệt đối giữ nguyên nội dung chuyển khoản là: **${orderCode}**`,
-        qrUrl: qrUrl
-    });
+            // Kiểm tra xem tin nhắn có bắt đầu bằng dấu chấm (.) không
+            if (text.startsWith(PREFIX)) {
+                const args = text.slice(PREFIX.length).trim().split(/\s+/);
+                const command = args[0].toLowerCase();
+
+                // ==========================================
+                // LỆNH .NAP
+                // ==========================================
+                if (command === "nap") {
+                    const orderCode = `NAP${senderUid}`;
+                    
+                    // Chống spam: Nếu đang có đơn chờ thì không tạo mới
+                    if (pendingOrders[orderCode] && pendingOrders[orderCode].status === 'pending') {
+                        await sendZaloMessage(chatId, `Bạn đang có đơn nạp chờ thanh toán. Vui lòng hoàn tất trước!`);
+                        return;
+                    }
+
+                    // Lưu đơn vào danh sách chờ
+                    pendingOrders[orderCode] = { 
+                        chatId: chatId, 
+                        senderUid: senderUid, 
+                        name: senderName, 
+                        status: 'pending' 
+                    };
+                    
+                    // Tạo mã QR không có số tiền cố định
+                    const qrUrl = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?addInfo=${orderCode}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
+
+                    // Gửi ảnh QR và nội dung CK vào nhóm
+                    await sendZaloPhoto(chatId, qrUrl, `Chào ${senderName}, vui lòng quét QR và tự nhập số tiền bạn muốn nạp.\nTuyệt đối giữ nguyên nội dung CK: ${orderCode}`);
+                }
+
+                // ==========================================
+                // LỆNH .SODU
+                // ==========================================
+                if (command === "sodu") {
+                    const balance = userBalances[senderUid] || 0;
+                    await sendZaloMessage(chatId, `Số dư của ${senderName} hiện tại là: ${Number(balance).toLocaleString('vi-VN')} VNĐ`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Lỗi xử lý Zalo Webhook:', error);
+    }
 });
 
 // ==========================================
-// API 2: Bot Zalo gọi vào đây khi user gõ lệnh .sodu
-// ==========================================
-app.post('/api/zalo-check-balance', (req, res) => {
-    const { uid } = req.body;
-    
-    if (!uid) return res.status(400).json({ error: 'Thiếu UID' });
-
-    // Lấy số dư, nếu chưa có thì mặc định là 0
-    const balance = userBalances[uid] || 0;
-
-    res.json({
-        success: true,
-        balance: balance,
-        message: `Số dư hiện tại của bạn là: **${Number(balance).toLocaleString('vi-VN')} VNĐ**`
-    });
-});
-
-// ==========================================
-// API 3: SePay gọi vào đây khi có tiền vào
+// 2. WEBHOOK SEPAY (SePay gọi vào đây khi có tiền vào tài khoản)
 // ==========================================
 app.post('/sepay-webhook', async (req, res) => {
     const content = req.body.content || '';
     const amountIn = req.body.transferAmount || 0; // Số tiền khách chuyển
 
-    // Tìm đơn hàng khớp với nội dung
+    // Tìm đơn hàng có mã khớp với nội dung chuyển khoản
     const matchedOrderCode = Object.keys(pendingOrders).find(code => content.includes(code));
 
     if (matchedOrderCode && amountIn > 0) {
         const order = pendingOrders[matchedOrderCode];
         
-        // 1. CỘNG TIỀN VÀO TÀI KHOẢN CỦA USER
-        const currentBalance = userBalances[order.uid] || 0;
-        userBalances[order.uid] = currentBalance + amountIn;
+        // 1. Cộng tiền vào tài khoản user
+        const currentBalance = userBalances[order.senderUid] || 0;
+        userBalances[order.senderUid] = currentBalance + amountIn;
 
-        // 2. Báo cáo kết quả
-        console.log(`=> Nạp thành công: UID ${order.uid} | +${amountIn}đ | Số dư mới: ${userBalances[order.uid]}đ`);
+        console.log(`=> Nhận tiền: ${order.name} (UID: ${order.senderUid}) nạp ${amountIn}đ`);
 
-        // 3. Gửi tin nhắn thông báo vào Group Zalo (Gọi hàm giả lập)
-        await sendZaloMessage(`Chúc mừng **${order.username}** đã nạp thành công **${Number(amountIn).toLocaleString('vi-VN')} VNĐ** vào tài khoản!`);
+        // 2. Gửi thông báo thành công vào đúng nhóm Zalo
+        await sendZaloMessage(order.chatId, `🎉 Chúc mừng ${order.name} đã nạp thành công ${Number(amountIn).toLocaleString('vi-VN')} VNĐ!`);
 
-        // 4. Xóa đơn chờ
+        // 3. Xóa đơn chờ để có thể tạo đơn mới
         delete pendingOrders[matchedOrderCode];
     }
 
     res.status(200).json({ success: true });
 });
 
-// Hàm gửi tin nhắn Zalo (Giả lập)
-async function sendZaloMessage(text) {
-    console.log(`[GỬI ZALO VÀO GROUP]: ${text}`);
+// ==========================================
+// CÁC HÀM GỌI API ZALO BOT
+// ==========================================
+async function sendZaloMessage(chatId, text) {
+    try {
+        await axios.post('https://bot-api.zaloplatforms.com/bot/v1/message/text', {
+            chat_id: chatId,
+            text: text
+        }, {
+            headers: { 'Authorization': `Bearer ${ZALO_BOT_TOKEN}` }
+        });
+    } catch (e) { 
+        console.error("Lỗi gửi text Zalo:", e.response?.data || e.message); 
+    }
+}
+
+async function sendZaloPhoto(chatId, photoUrl, caption) {
+    try {
+        await axios.post('https://bot-api.zaloplatforms.com/bot/v1/message/photo', {
+            chat_id: chatId,
+            photo: photoUrl, 
+            caption: caption
+        }, {
+            headers: { 'Authorization': `Bearer ${ZALO_BOT_TOKEN}` }
+        });
+    } catch (e) { 
+        console.error("Lỗi gửi ảnh Zalo:", e.response?.data || e.message); 
+    }
 }
 
 const PORT = process.env.PORT || 3000;
