@@ -4,7 +4,7 @@ const app = express();
 
 app.use(express.json());
 
-// ==========================================
+// ==========================4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA===============
 // CẤU HÌNH THÔNG TIN CỦA BẠN
 // ==========================================
 const BANK_ID = 'TPBANK';
