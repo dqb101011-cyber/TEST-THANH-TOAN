@@ -13,7 +13,7 @@ const ACCOUNT_NAME = 'DUONG QUOC BAO';
 const PREFIX = ".";
 
 // CẤU HÌNH ZALO BOT (Lấy từ Zalo Bot Platform)
-const ZALO_BOT_TOKEN = 'DAN_MA_BOT_TOKEN_VAO_DAY'; 
+const ZALO_BOT_TOKEN = '4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA'; 
 const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; // Như trên ảnh của bạn
 
 // ==========================================
