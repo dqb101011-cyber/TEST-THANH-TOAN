@@ -13,7 +13,7 @@ const ACCOUNT_NAME = 'DUONG QUOC BAO';
 const PREFIX = ".";
 
 // CẤU HÌNH ZALO BOT
-const ZALO_BOT_TOKEN = 'DAN_MA_BOT_TOKEN_MOI_VAO_DAY'; // <-- Dán Token của bạn vào đây
+const ZALO_BOT_TOKEN = '4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA'; // <-- Dán Token của bạn vào đây
 const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; 
 
 // ĐƯỜNG DẪN CƠ SỞ THEO CHUẨN FILE MẪU
