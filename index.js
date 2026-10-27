@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-const FormData = require('form-data');
 const app = express();
 
 app.use(express.json());
@@ -13,9 +12,12 @@ const ACCOUNT_NO = '98437888888';
 const ACCOUNT_NAME = 'DUONG QUOC BAO';
 const PREFIX = ".";
 
-// CẤU HÌNH ZALO BOT (Đã thay Token của bạn)
+// CẤU HÌNH ZALO BOT
 const ZALO_BOT_TOKEN = '4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA'; 
 const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; 
+
+// CẤU HÌNH IMGBB (Đã lấy API Key của bạn)
+const IMGBB_API_KEY = 'f333aa75c1397c8efa8e9a15ddbe86e4';
 
 // CẤU HÌNH ĐƯỜNG DẪN CƠ SỞ
 const BASE_URL = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}`;
@@ -36,9 +38,9 @@ async function setupWebhook() {
             secret_token: ZALO_SECRET_TOKEN
         });
         if (response.data.ok) console.log("✅ Đăng ký Webhook thành công!");
-        else console.error("❌ Zalo từ chối đăng ký:", response.data);
+        else console.error("❌ Zalo từ chối:", response.data);
     } catch (error) {
-        console.error("❌ Lỗi kết nối đăng ký Webhook:", error.response?.data || error.message);
+        console.error("❌ Lỗi đăng ký Webhook:", error.response?.data || error.message);
     }
 }
 
@@ -69,14 +71,11 @@ app.post('/webhook', async (req, res) => {
                 // Lệnh .nap
                 if (command === "nap") {
                     const orderCode = `NAP${senderUid}`;
-                    
-                    // Lưu (hoặc ghi đè) đơn vào danh sách chờ
                     pendingOrders[orderCode] = { chatId, senderUid, name: senderName, status: 'pending' };
                     
-                    // Link ảnh QR từ VietQR
                     const qrUrl = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?addInfo=${orderCode}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
 
-                    await sendPhoto(chatId, qrUrl, `Chào ${senderName}, vui lòng quét QR và tự nhập số tiền bạn muốn nạp.\nTuyệt đối giữ nguyên nội dung CK: ${orderCode}`);
+                    await sendPhotoViaImgBB(chatId, qrUrl, `Chào ${senderName}, vui lòng quét QR và tự nhập số tiền bạn muốn nạp.\nTuyệt đối giữ nguyên nội dung CK: ${orderCode}`);
                 }
 
                 // Lệnh .sodu
@@ -105,8 +104,6 @@ app.post('/sepay-webhook', async (req, res) => {
         userBalances[order.senderUid] = (userBalances[order.senderUid] || 0) + amountIn;
 
         await sendMessage(order.chatId, `🎉 Chúc mừng ${order.name} đã nạp thành công ${Number(amountIn).toLocaleString('vi-VN')} VNĐ!`);
-        
-        // Xóa đơn khỏi danh sách chờ
         delete pendingOrders[matchedOrderCode];
     }
 
@@ -129,43 +126,49 @@ async function sendMessage(chatId, text) {
 }
 
 // ==========================================
-// HÀM GỬI ẢNH (ĐÃ SỬA LỖI MIME TYPE)
+// HÀM GỬI ẢNH QUA IMGBB (CHUẨN XÁC)
 // ==========================================
-async function sendPhoto(chatId, photoUrl, caption) {
+async function sendPhotoViaImgBB(chatId, qrUrl, caption) {
     try {
         console.log(`⏳ Đang tải ảnh QR từ VietQR...`);
         
         // 1. Tải ảnh từ link VietQR về dưới dạng Buffer
-        const imageResponse = await axios.get(photoUrl, { responseType: 'arraybuffer' });
+        const imageResponse = await axios.get(qrUrl, { responseType: 'arraybuffer' });
         const imageBuffer = Buffer.from(imageResponse.data, 'binary');
-        console.log(`✅ Đã tải ảnh thành công (${imageBuffer.length} bytes). Đang gửi lên Zalo...`);
-
-        // 2. Đóng gói thành form-data
-        const form = new FormData();
-        form.append('chat_id', chatId);
-        form.append('caption', caption || '');
         
-        // Thêm contentType và filename chuẩn để Zalo không báo lỗi ảnh trống
-        form.append('photo', imageBuffer, { 
-            filename: 'ma_qr.png', 
-            contentType: 'image/png' 
+        // 2. Chuyển sang Base64 và Upload lên ImgBB
+        const imageBase64 = imageBuffer.toString('base64');
+        console.log(`⏳ Đang upload ảnh lên ImgBB...`);
+        
+        const form = new URLSearchParams();
+        form.append('key', IMGBB_API_KEY);
+        form.append('image', imageBase64);
+
+        const uploadRes = await axios.post('https://api.imgbb.com/1/upload', form.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
-        // 3. Gửi lên Zalo Bot API
-        const response = await axios.post(`${BASE_URL}/sendPhoto`, form, {
-            headers: {
-                ...form.getHeaders()
-            },
-            maxContentLength: Infinity,
-            maxBodyLength: Infinity
-        });
+        if (!uploadRes.data.success) {
+            throw new Error("Up ảnh ImgBB thất bại!");
+        }
         
-        // Kiểm tra kết quả trả về từ Zalo
-        if (response.data && response.data.ok) {
+        const cleanImageUrl = uploadRes.data.data.url;
+        console.log(`✅ Đã có link ảnh sạch: ${cleanImageUrl}`);
+
+        // 3. Gửi link ảnh cho Zalo Bot
+        console.log(`⏳ Đang gửi ảnh lên Zalo...`);
+        const zaloRes = await axios.post(`${BASE_URL}/sendPhoto`, {
+            chat_id: chatId,
+            photo: cleanImageUrl,
+            caption: caption
+        });
+
+        if (zaloRes.data.ok) {
             console.log(`✅ Đã gửi ảnh QR tới ${chatId} thành công!`);
         } else {
-            console.error(`❌ Zalo báo lỗi gửi ảnh:`, response.data);
+            console.error(`❌ Zalo báo lỗi gửi ảnh:`, zaloRes.data);
         }
+
     } catch (err) {
         console.error('❌ LỖI GỬI ẢNH:', err.response ? err.response.data : err.message);
         
