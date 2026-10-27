@@ -13,10 +13,11 @@ const ACCOUNT_NAME = 'DUONG QUOC BAO';
 const PREFIX = ".";
 
 // CẤU HÌNH ZALO BOT
-const ZALO_BOT_TOKEN = '4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA'; // <-- Thay Token của bạn vào đây
+const ZALO_BOT_TOKEN = 'DAN_MA_BOT_TOKEN_MOI_VAO_DAY'; // <-- Dán Token của bạn vào đây
 const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; 
 
-// Cấu hình URL của Render
+// ĐƯỜNG DẪN CƠ SỞ THEO CHUẨN FILE MẪU
+const BASE_URL = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}`;
 const RENDER_URL = 'https://test-thanh-toan.onrender.com';
 
 // ==========================================
@@ -30,12 +31,13 @@ const pendingOrders = {};
 // ==========================================
 async function setupWebhook() {
     try {
-        const entrypoint = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/setWebhook`;
+        const entrypoint = `${BASE_URL}/setWebhook`;
         const response = await axios.post(entrypoint, {
-            url: `${RENDER_URL}/zalo-webhook`,
+            url: `${RENDER_URL}/webhook`, // SỬA THÀNH /webhook CHO KHỚP VỚI BÊN DƯỚI
             secret_token: ZALO_SECRET_TOKEN
         });
         if (response.data.ok) console.log("✅ Đăng ký Webhook thành công!");
+        else console.error("❌ Zalo từ chối:", response.data);
     } catch (error) {
         console.error("❌ Lỗi đăng ký Webhook:", error.response?.data || error.message);
     }
@@ -44,7 +46,7 @@ async function setupWebhook() {
 // ==========================================
 // 1. WEBHOOK ZALO BOT (Nhận tin nhắn)
 // ==========================================
-app.post('/zalo-webhook', async (req, res) => {
+app.post('/webhook', async (req, res) => { // SỬA THÀNH /webhook
     const secretHeader = req.headers['x-bot-api-secret-token'];
     if (secretHeader !== ZALO_SECRET_TOKEN) return res.status(401).send('Unauthorized');
 
@@ -53,6 +55,7 @@ app.post('/zalo-webhook', async (req, res) => {
     try {
         const data = req.body;
         
+        // Cấu trúc dữ liệu chuẩn của Zalo Bot API
         if (data.event_name === 'message.text.received') {
             const text = data.message.text.trim();
             const chatId = data.message.chat.id;       
@@ -70,19 +73,19 @@ app.post('/zalo-webhook', async (req, res) => {
                     const orderCode = `NAP${senderUid}`;
                     
                     if (pendingOrders[orderCode]) {
-                        return await sendZaloMessage(chatId, `Bạn đang có đơn nạp chờ thanh toán. Vui lòng hoàn tất!`);
+                        return await sendMessage(chatId, `Bạn đang có đơn nạp chờ thanh toán. Vui lòng hoàn tất!`);
                     }
 
                     pendingOrders[orderCode] = { chatId, senderUid, name: senderName, status: 'pending' };
                     const qrUrl = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?addInfo=${orderCode}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
 
-                    await sendZaloPhoto(chatId, qrUrl, `Chào ${senderName}, vui lòng quét QR và tự nhập số tiền bạn muốn nạp.\nTuyệt đối giữ nguyên nội dung CK: ${orderCode}`);
+                    await sendPhoto(chatId, qrUrl, `Chào ${senderName}, vui lòng quét QR và tự nhập số tiền bạn muốn nạp.\nTuyệt đối giữ nguyên nội dung CK: ${orderCode}`);
                 }
 
                 // Lệnh .sodu
                 if (command === "sodu") {
                     const balance = userBalances[senderUid] || 0;
-                    await sendZaloMessage(chatId, `Số dư của ${senderName} hiện tại là: ${Number(balance).toLocaleString('vi-VN')} VNĐ`);
+                    await sendMessage(chatId, `Số dư của ${senderName} hiện tại là: ${Number(balance).toLocaleString('vi-VN')} VNĐ`);
                 }
             }
         }
@@ -104,7 +107,7 @@ app.post('/sepay-webhook', async (req, res) => {
         const order = pendingOrders[matchedOrderCode];
         userBalances[order.senderUid] = (userBalances[order.senderUid] || 0) + amountIn;
 
-        await sendZaloMessage(order.chatId, `🎉 Chúc mừng ${order.name} đã nạp thành công ${Number(amountIn).toLocaleString('vi-VN')} VNĐ!`);
+        await sendMessage(order.chatId, `🎉 Chúc mừng ${order.name} đã nạp thành công ${Number(amountIn).toLocaleString('vi-VN')} VNĐ!`);
         delete pendingOrders[matchedOrderCode];
     }
 
@@ -112,47 +115,32 @@ app.post('/sepay-webhook', async (req, res) => {
 });
 
 // ==========================================
-// CÁC HÀM GỬI TIN NHẮN (ĐÃ SỬA ĐƯỜNG DẪN CHUẨN)
+// CÁC HÀM GỬI TIN NHẮN (SỬA THEO ĐÚNG FILE MẪU)
 // ==========================================
-async function sendZaloMessage(chatId, text) {
+async function sendMessage(chatId, text) {
     try {
-        // ĐƯỜNG DẪN ĐÃ BỎ /v1.0
-        const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/message/text`;
-        
-        const response = await axios.post(url, {
-            chat_id: chatId,
-            text: text
+        // Dùng BASE_URL chuẩn và endpoint /sendMessage
+        await axios.post(`${BASE_URL}/sendMessage`, { 
+            chat_id: chatId, 
+            text: text 
         });
-
-        // Kiểm tra kỹ response trả về
-        if (response.data && response.data.ok) {
-            console.log("✅ Gửi text thành công!");
-        } else {
-            console.error("❌ Zalo trả về lỗi khi gửi text:", response.data);
-        }
-    } catch (e) { 
-        console.error("❌ Lỗi gửi text Zalo:", e.response?.data || e.message); 
+        console.log(`✅ Đã gửi tin nhắn tới ${chatId}`);
+    } catch (err) {
+        console.error('❌ Lỗi gửi tin nhắn:', err.response ? err.response.data : err.message);
     }
 }
 
-async function sendZaloPhoto(chatId, photoUrl, caption) {
+async function sendPhoto(chatId, photoUrl, caption) {
     try {
-        // ĐƯỜNG DẪN ĐÃ BỎ /v1.0
-        const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/message/photo`;
-        
-        const response = await axios.post(url, {
-            chat_id: chatId,
+        // Dùng BASE_URL chuẩn và endpoint /sendPhoto
+        await axios.post(`${BASE_URL}/sendPhoto`, { 
+            chat_id: chatId, 
             photo: photoUrl, 
-            caption: caption
+            caption: caption || '' 
         });
-
-        if (response.data && response.data.ok) {
-            console.log("✅ Gửi ảnh thành công!");
-        } else {
-            console.error("❌ Zalo trả về lỗi khi gửi ảnh:", response.data);
-        }
-    } catch (e) { 
-        console.error("❌ Lỗi gửi ảnh Zalo:", e.response?.data || e.message); 
+        console.log(`✅ Đã gửi ảnh tới ${chatId}`);
+    } catch (err) {
+        console.error('❌ Lỗi gửi ảnh:', err.response ? err.response.data : err.message);
     }
 }
 
