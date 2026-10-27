@@ -12,14 +12,13 @@ const ACCOUNT_NO = '98437888888';
 const ACCOUNT_NAME = 'DUONG QUOC BAO';
 const PREFIX = ".";
 
-// CẤU HÌNH ZALO BOT
-const ZALO_BOT_TOKEN = '4021519611107965798:mHOMYRHTjxDbRdfPvkXeOcyawJYaRMioZkHmySaxjUTZFRScsaeKdpNBwrGXpWvx'; // Bấm con mắt trên Zalo Bot để lấy
+// CẤU HÌNH ZALO BOT (Lấy từ Zalo Bot Platform)
+const ZALO_BOT_TOKEN = 'DAN_MA_BOT_TOKEN_VAO_DAY'; 
 const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; // Như trên ảnh của bạn
 
 // ==========================================
 // DATABASE TẠM (Lưu số dư và đơn hàng)
-// Lưu ý: Nếu Render khởi động lại, dữ liệu này sẽ mất.
-// Khi chạy thực tế, bạn nên thay bằng MongoDB hoặc Supabase.
+// Lưu ý: Render Free khởi động lại sẽ mất dữ liệu này.
 // ==========================================
 const userBalances = {}; // { "uid_zalo": 50000 }
 const pendingOrders = {}; // { "NAPuid_zalo": { chatId, senderUid, name, status } }
@@ -152,7 +151,10 @@ async function sendZaloPhoto(chatId, photoUrl, caption) {
     }
 }
 
+// ==========================================
+// KHỞI CHẠY SERVER
+// ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server chạy ở port ${PORT}`);
+    console.log(`Bot Server chạy ở port ${PORT}`);
 });
