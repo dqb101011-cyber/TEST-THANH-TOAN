@@ -4,7 +4,7 @@ const app = express();
 
 app.use(express.json());
 
-// ==========================4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA===============
+// ==========================================
 // CẤU HÌNH THÔNG TIN CỦA BẠN
 // ==========================================
 const BANK_ID = 'TPBANK';
@@ -13,7 +13,7 @@ const ACCOUNT_NAME = 'DUONG QUOC BAO';
 const PREFIX = ".";
 
 // CẤU HÌNH ZALO BOT
-const ZALO_BOT_TOKEN = '4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA'; // <-- Dán Token của bạn vào đây
+const ZALO_BOT_TOKEN = '4398546430072574622:pkfqTpvLQsqErSvMkfIJCCGGEjAFrbhDCyEMrmBAXtJIwiXoPYLeNrcdEVJKQDKA'; // <-- Thay Token của bạn vào đây
 const ZALO_SECRET_TOKEN = 'duongquocbaono1Nscam1010'; 
 
 // Cấu hình URL của Render
@@ -26,7 +26,7 @@ const userBalances = {};
 const pendingOrders = {}; 
 
 // ==========================================
-// 0. TỰ ĐỘNG ĐĂNG KÝ WEBHOOK VỚI ZALO
+// 0. TỰ ĐỘNG ĐĂNG KÝ WEBHOOK
 // ==========================================
 async function setupWebhook() {
     try {
@@ -35,25 +35,18 @@ async function setupWebhook() {
             url: `${RENDER_URL}/zalo-webhook`,
             secret_token: ZALO_SECRET_TOKEN
         });
-
-        if (response.data.ok) {
-            console.log("✅ Đăng ký Webhook thành công!");
-        } else {
-            console.error("❌ Zalo từ chối đăng ký Webhook:", response.data);
-        }
+        if (response.data.ok) console.log("✅ Đăng ký Webhook thành công!");
     } catch (error) {
         console.error("❌ Lỗi đăng ký Webhook:", error.response?.data || error.message);
     }
 }
 
 // ==========================================
-// 1. WEBHOOK ZALO BOT (Nhận tin nhắn từ người dùng)
+// 1. WEBHOOK ZALO BOT (Nhận tin nhắn)
 // ==========================================
 app.post('/zalo-webhook', async (req, res) => {
     const secretHeader = req.headers['x-bot-api-secret-token'];
-    if (secretHeader !== ZALO_SECRET_TOKEN) {
-        return res.status(401).send('Unauthorized');
-    }
+    if (secretHeader !== ZALO_SECRET_TOKEN) return res.status(401).send('Unauthorized');
 
     res.status(200).send('OK'); // Trả lời Zalo ngay
 
@@ -99,7 +92,7 @@ app.post('/zalo-webhook', async (req, res) => {
 });
 
 // ==========================================
-// 2. WEBHOOK SEPAY (Nhận tiền chuyển khoản)
+// 2. WEBHOOK SEPAY (Nhận tiền)
 // ==========================================
 app.post('/sepay-webhook', async (req, res) => {
     const content = req.body.content || '';
@@ -119,33 +112,33 @@ app.post('/sepay-webhook', async (req, res) => {
 });
 
 // ==========================================
-// CÁC HÀM GỬI TIN NHẮN QUA ZALO BOT API
+// CÁC HÀM GỬI TIN NHẮN (ĐÃ SỬA ĐƯỜNG DẪN CHUẨN)
 // ==========================================
 async function sendZaloMessage(chatId, text) {
     try {
-        // Đã sửa lại đường dẫn API chuẩn có chữ /v1.0/
-        const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/v1.0/message/text`;
-        
-        console.log(`Đang gửi tin nhắn tới chatId: ${chatId}...`);
+        // ĐƯỜNG DẪN ĐÃ BỎ /v1.0
+        const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/message/text`;
         
         const response = await axios.post(url, {
             chat_id: chatId,
             text: text
         });
 
-        console.log("✅ Gửi tin nhắn thành công!", response.data);
+        // Kiểm tra kỹ response trả về
+        if (response.data && response.data.ok) {
+            console.log("✅ Gửi text thành công!");
+        } else {
+            console.error("❌ Zalo trả về lỗi khi gửi text:", response.data);
+        }
     } catch (e) { 
-        // In chi tiết lỗi từ Zalo ra để dễ sửa
         console.error("❌ Lỗi gửi text Zalo:", e.response?.data || e.message); 
     }
 }
 
 async function sendZaloPhoto(chatId, photoUrl, caption) {
     try {
-        // Đã sửa lại đường dẫn API chuẩn có chữ /v1.0/
-        const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/v1.0/message/photo`;
-        
-        console.log(`Đang gửi ảnh QR tới chatId: ${chatId}...`);
+        // ĐƯỜNG DẪN ĐÃ BỎ /v1.0
+        const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/message/photo`;
         
         const response = await axios.post(url, {
             chat_id: chatId,
@@ -153,7 +146,11 @@ async function sendZaloPhoto(chatId, photoUrl, caption) {
             caption: caption
         });
 
-        console.log("✅ Gửi ảnh QR thành công!", response.data);
+        if (response.data && response.data.ok) {
+            console.log("✅ Gửi ảnh thành công!");
+        } else {
+            console.error("❌ Zalo trả về lỗi khi gửi ảnh:", response.data);
+        }
     } catch (e) { 
         console.error("❌ Lỗi gửi ảnh Zalo:", e.response?.data || e.message); 
     }
